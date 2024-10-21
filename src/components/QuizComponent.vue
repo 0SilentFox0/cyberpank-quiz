@@ -4,18 +4,41 @@ import * as THREE from 'three'
 import gsap from 'gsap'
 import { createNoise3D } from 'simplex-noise'
 
-const currentQuestion = ref({
-  id: 1,
-  text: 'Upon arriving at the docks your stomach growls. Fortunately, there are plenty of fish in the sea! But how will you catch one?',
-  options: [
-    { id: 1, text: 'USE THE SHARP STICK' },
-    { id: 2, text: 'STEAL THE NET' },
-    { id: 3, text: 'USE YOUR HANDS' },
-    { id: 4, text: 'FORAGE FOR KELP INSTEAD' },
-  ],
-  totalQuestions: 8,
-  currentQuestionNumber: 2,
-})
+const questions = [
+  {
+    id: 1,
+    text: 'Upon arriving at the docks your stomach growls. Fortunately, there are plenty of fish in the sea! But how will you catch one?',
+    options: [
+      { id: 1, text: 'USE THE SHARP STICK' },
+      { id: 2, text: 'STEAL THE NET' },
+      { id: 3, text: 'USE YOUR HANDS' },
+      { id: 4, text: 'FORAGE FOR KELP INSTEAD' },
+    ],
+  },
+  {
+    id: 2,
+    text: 'You see a mysterious cave entrance. What do you do?',
+    options: [
+      { id: 1, text: 'ENTER THE CAVE' },
+      { id: 2, text: 'IGNORE IT AND MOVE ON' },
+      { id: 3, text: 'CALL FOR HELP' },
+      { id: 4, text: 'SET UP CAMP NEARBY' },
+    ],
+  },
+  {
+    id: 3,
+    text: 'You find an old map. What`s your next move?',
+    options: [
+      { id: 1, text: 'FOLLOW THE MAP' },
+      { id: 2, text: 'SELL THE MAP' },
+      { id: 3, text: 'STUDY THE MAP' },
+      { id: 4, text: 'DISCARD THE MAP' },
+    ],
+  },
+]
+
+const currentQuestionIndex = ref(0)
+const currentQuestion = ref(questions[0])
 
 const canvasRef = ref(null)
 const bgMusic = ref(null)
@@ -26,10 +49,18 @@ let scene,
   renderer,
   inkBlobs = []
 
-const noise = createNoise3D()
+// Sound toggle function
+const toggleMusic = () => {
+  if (bgMusic.value) {
+    if (isMusicPlaying.value) {
+      bgMusic.value.pause()
+    } else {
+      bgMusic.value.play()
+    }
+    isMusicPlaying.value = !isMusicPlaying.value
+  }
+}
 
-// Previous Three.js related functions remain the same...
-// Sound effect creation
 const createSelectSound = () => {
   const audioContext = new (window.AudioContext || window.webkitAudioContext)()
   const oscillator = audioContext.createOscillator()
@@ -193,28 +224,9 @@ const animate = () => {
   renderer.render(scene, camera)
 }
 
-// Handle music play
-const startBackgroundMusic = () => {
-  if (bgMusic.value && !isMusicPlaying.value) {
-    bgMusic.value.volume = 0.3
-    bgMusic.value.loop = true
-    bgMusic.value
-      .play()
-      .then(() => {
-        isMusicPlaying.value = true
-      })
-      .catch(error => {
-        console.log('Audio playback failed:', error)
-      })
-  }
-}
-
-// Handle answer selection
+// Modify the selectAnswer function to include the tunnel animation
 const selectAnswer = async option => {
   if (isTransitioning.value) return
-
-  // Start music if not playing (user interaction)
-  startBackgroundMusic()
 
   isTransitioning.value = true
 
@@ -224,20 +236,36 @@ const selectAnswer = async option => {
   // Create new ink blob effect
   createInkBlob()
 
-  // Animate answer selection
+  // Hide current question
   await gsap.to('.quiz-content', {
     opacity: 0,
     duration: 0.5,
     ease: 'power2.in',
   })
 
-  // Simulate loading next question
-  await new Promise(resolve => setTimeout(resolve, 1000))
+  // Tunnel animation
+  await gsap.to(camera.position, {
+    z: -10,
+    duration: 1,
+    ease: 'power2.in',
+  })
 
-  // Update question
-  currentQuestion.value.currentQuestionNumber++
+  // Update to next question
+  currentQuestionIndex.value =
+    (currentQuestionIndex.value + 1) % questions.length
+  currentQuestion.value = questions[currentQuestionIndex.value]
 
-  // Fade in new question
+  // Reset camera position
+  gsap.set(camera.position, { z: 10 })
+
+  // Animate camera back to original position
+  await gsap.to(camera.position, {
+    z: 5,
+    duration: 1,
+    ease: 'power2.out',
+  })
+
+  // Show new question
   await gsap.to('.quiz-content', {
     opacity: 1,
     duration: 0.5,
@@ -246,6 +274,7 @@ const selectAnswer = async option => {
 
   isTransitioning.value = false
 }
+// ... rest of the setup code remains the same
 
 onMounted(() => {
   initThree()
@@ -266,18 +295,14 @@ onBeforeUnmount(() => {
 <template>
   <div class="quiz-container">
     <!-- Background music -->
-    <audio ref="bgMusic" src="/bg-music.mp3" preload="auto"></audio>
+    <audio ref="bgMusic" src="/bg-music.mp3" preload="auto" loop></audio>
 
     <!-- Three.js canvas -->
     <canvas ref="canvasRef" class="absolute inset-0 -z-10"></canvas>
 
-    <!-- Music start button (shown only if music isn't playing) -->
-    <button
-      v-if="!isMusicPlaying"
-      @click="startBackgroundMusic"
-      class="music-button"
-    >
-      🎵 Start Music
+    <!-- Music toggle button -->
+    <button @click="toggleMusic" class="music-button">
+      🎵 {{ isMusicPlaying ? 'Turn Off' : 'Turn On' }} Music
     </button>
 
     <!-- Quiz content -->
@@ -285,8 +310,7 @@ onBeforeUnmount(() => {
       <!-- Question counter -->
       <div class="question-counter">
         <span class="cyber-text"
-          >{{ currentQuestion.currentQuestionNumber }} /
-          {{ currentQuestion.totalQuestions }}</span
+          >{{ currentQuestionIndex + 1 }} / {{ questions.length }}</span
         >
       </div>
 
@@ -331,9 +355,10 @@ onBeforeUnmount(() => {
 
 .question-counter {
   @apply text-lg font-mono tracking-wider mb-8;
-  background: linear-gradient(45deg, #ff66b3, #66ffff);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+}
+
+.cyber-text {
+  @apply relative inline-block px-4 py-1 bg-gradient-to-r from-pink-500 to-cyan-500 text-transparent bg-clip-text;
 }
 
 .question-text {
@@ -361,15 +386,5 @@ onBeforeUnmount(() => {
   @apply shadow-lg;
   text-shadow: 0 0 10px rgba(103, 232, 249, 0.8);
   box-shadow: 0 0 30px rgba(103, 232, 249, 0.2);
-}
-
-.cyber-text {
-  @apply relative inline-block px-4 py-1;
-}
-
-.cyber-text::before {
-  content: '';
-  @apply absolute inset-0 border-2 border-cyan-400/30
-         transform skew-x-12 -z-10;
 }
 </style>
