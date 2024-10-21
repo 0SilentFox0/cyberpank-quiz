@@ -1,44 +1,77 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import * as THREE from 'three'
 import gsap from 'gsap'
-import { createNoise3D } from 'simplex-noise'
+import ResultComponent from './ResultComponent.vue'
 
 const questions = [
   {
     id: 1,
-    text: 'Upon arriving at the docks your stomach growls. Fortunately, there are plenty of fish in the sea! But how will you catch one?',
+    text: 'You encounter a demon. What`s your first instinct?',
     options: [
-      { id: 1, text: 'USE THE SHARP STICK' },
-      { id: 2, text: 'STEAL THE NET' },
-      { id: 3, text: 'USE YOUR HANDS' },
-      { id: 4, text: 'FORAGE FOR KELP INSTEAD' },
+      { id: 1, text: 'ATTACK IMMEDIATELY', character: 'Inosuke' },
+      { id: 2, text: 'ANALYZE ITS MOVEMENTS', character: 'Giyu' },
+      { id: 3, text: 'PROTECT NEARBY CIVILIANS', character: 'Tanjiro' },
+      { id: 4, text: 'CALL FOR BACKUP', character: 'Zenitsu' },
     ],
   },
   {
     id: 2,
-    text: 'You see a mysterious cave entrance. What do you do?',
+    text: 'Which quality do you value most in yourself?',
     options: [
-      { id: 1, text: 'ENTER THE CAVE' },
-      { id: 2, text: 'IGNORE IT AND MOVE ON' },
-      { id: 3, text: 'CALL FOR HELP' },
-      { id: 4, text: 'SET UP CAMP NEARBY' },
+      { id: 1, text: 'STRENGTH', character: 'Inosuke' },
+      { id: 2, text: 'DISCIPLINE', character: 'Giyu' },
+      { id: 3, text: 'COMPASSION', character: 'Tanjiro' },
+      { id: 4, text: 'LOYALTY', character: 'Zenitsu' },
     ],
   },
   {
     id: 3,
-    text: 'You find an old map. What`s your next move?',
+    text: 'How do you approach training?',
     options: [
-      { id: 1, text: 'FOLLOW THE MAP' },
-      { id: 2, text: 'SELL THE MAP' },
-      { id: 3, text: 'STUDY THE MAP' },
-      { id: 4, text: 'DISCARD THE MAP' },
+      { id: 1, text: 'PUSH MYSELF TO THE LIMIT', character: 'Inosuke' },
+      { id: 2, text: 'FOCUS ON PERFECTING TECHNIQUE', character: 'Giyu' },
+      { id: 3, text: 'BALANCE MIND AND BODY', character: 'Tanjiro' },
+      {
+        id: 4,
+        text: 'PRACTICE UNTIL IT BECOMES INSTINCT',
+        character: 'Zenitsu',
+      },
+    ],
+  },
+  {
+    id: 4,
+    text: 'What`s your biggest fear?',
+    options: [
+      { id: 1, text: 'BEING WEAK', character: 'Inosuke' },
+      { id: 2, text: 'FAILING TO PROTECT OTHERS', character: 'Giyu' },
+      { id: 3, text: 'LOSING LOVED ONES', character: 'Tanjiro' },
+      { id: 4, text: 'FACING DANGERS ALONE', character: 'Zenitsu' },
+    ],
+  },
+  {
+    id: 5,
+    text: 'How do you deal with setbacks?',
+    options: [
+      { id: 1, text: 'TRAIN HARDER', character: 'Inosuke' },
+      { id: 2, text: 'REFLECT AND IMPROVE', character: 'Giyu' },
+      { id: 3, text: 'STAY POSITIVE AND KEEP GOING', character: 'Tanjiro' },
+      { id: 4, text: 'WORRY, THEN OVERCOME', character: 'Zenitsu' },
     ],
   },
 ]
 
 const currentQuestionIndex = ref(0)
-const currentQuestion = ref(questions[0])
+const currentQuestion = computed(() => questions[currentQuestionIndex.value])
+const isQuestionVisible = ref(true)
+const quizCompleted = ref(false)
+const characterCounts = ref({
+  Inosuke: 0,
+  Giyu: 0,
+  Tanjiro: 0,
+  Zenitsu: 0,
+})
+const resultCharacter = ref('')
 
 const canvasRef = ref(null)
 const bgMusic = ref(null)
@@ -224,7 +257,6 @@ const animate = () => {
   renderer.render(scene, camera)
 }
 
-// Modify the selectAnswer function to include the tunnel animation
 const selectAnswer = async option => {
   if (isTransitioning.value) return
 
@@ -235,6 +267,9 @@ const selectAnswer = async option => {
 
   // Create new ink blob effect
   createInkBlob()
+
+  // Track character selection
+  characterCounts.value[option.character]++
 
   // Hide current question
   await gsap.to('.quiz-content', {
@@ -250,31 +285,45 @@ const selectAnswer = async option => {
     ease: 'power2.in',
   })
 
-  // Update to next question
-  currentQuestionIndex.value =
-    (currentQuestionIndex.value + 1) % questions.length
-  currentQuestion.value = questions[currentQuestionIndex.value]
+  // Update to next question or complete quiz
+  currentQuestionIndex.value++
+  if (currentQuestionIndex.value >= questions.length) {
+    completeQuiz()
+  } else {
+    // Reset camera position
+    gsap.set(camera.position, { z: 10 })
 
-  // Reset camera position
-  gsap.set(camera.position, { z: 10 })
+    // Animate camera back to original position
+    await gsap.to(camera.position, {
+      z: 5,
+      duration: 1,
+      ease: 'power2.out',
+    })
 
-  // Animate camera back to original position
-  await gsap.to(camera.position, {
-    z: 5,
-    duration: 1,
-    ease: 'power2.out',
-  })
+    // Show new question
+    await gsap.to('.quiz-content', {
+      opacity: 1,
+      duration: 0.5,
+      ease: 'power2.out',
+    })
+  }
 
-  // Show new question
-  await gsap.to('.quiz-content', {
+  isTransitioning.value = false
+}
+
+const completeQuiz = () => {
+  quizCompleted.value = true
+  resultCharacter.value = Object.entries(characterCounts.value).reduce(
+    (a, b) => (a[1] > b[1] ? a : b),
+  )[0]
+
+  // Show result
+  gsap.to('.quiz-content', {
     opacity: 1,
     duration: 0.5,
     ease: 'power2.out',
   })
-
-  isTransitioning.value = false
 }
-// ... rest of the setup code remains the same
 
 onMounted(() => {
   initThree()
@@ -307,30 +356,34 @@ onBeforeUnmount(() => {
 
     <!-- Quiz content -->
     <div class="relative z-10 quiz-content">
-      <!-- Question counter -->
-      <div class="question-counter">
-        <span class="cyber-text"
-          >{{ currentQuestionIndex + 1 }} / {{ questions.length }}</span
-        >
-      </div>
+      <template v-if="!quizCompleted">
+        <!-- Question counter -->
+        <div class="question-counter">
+          <span class="cyber-text"
+            >{{ currentQuestionIndex + 1 }} / {{ questions.length }}</span
+          >
+        </div>
 
-      <!-- Question text -->
-      <div class="question-text">
-        {{ currentQuestion.text }}
-      </div>
+        <!-- Question text -->
+        <div class="question-text">
+          {{ currentQuestion.text }}
+        </div>
 
-      <!-- Options -->
-      <div class="options-container">
-        <button
-          v-for="option in currentQuestion.options"
-          :key="option.id"
-          class="option-button"
-          :disabled="isTransitioning"
-          @click="selectAnswer(option)"
-        >
-          {{ option.text }}
-        </button>
-      </div>
+        <!-- Options -->
+        <div class="options-container">
+          <button
+            v-for="option in currentQuestion.options"
+            :key="option.id"
+            class="option-button"
+            :disabled="isTransitioning"
+            @click="selectAnswer(option)"
+          >
+            {{ option.text }}
+          </button>
+        </div>
+      </template>
+
+      <ResultComponent v-else :resultCharacter="resultCharacter" />
     </div>
   </div>
 </template>
